@@ -1,0 +1,46 @@
+# Godot 4+ specific ignores
+.godot/
+
+# Godot 3+ specific ignores
+.import/
+export.cfg
+export_presets.cfg
+
+# Imported translations (if not stored directly in the project)
+*.translation
+
+# Mono/C# specific ignores
+.mono/
+data_*/
+mono_crash.*.json
+*.csproj.user
+obj/
+bin/
+
+# System/OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+
+# ---------------------------------------------------
+# Linux & Editor specific ignores
+# ---------------------------------------------------
+
+# Linux file managers
+.directory
+
+# Vim / Nano / Emacs temporary and backup files
+*~
+*.swp
+*.swo
+
+# Core dump files (in case the engine crashes)
+core.*
+core
+
+# IDEs commonly used on Linux (optional, uncomment if you use them)
+#.vscode/
+#.idea/
