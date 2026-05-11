@@ -2,7 +2,7 @@ extends CharacterBody3D
 
 # --- Speeds & Acceleration ---
 const WALK_SPEED = 5.0
-const SPRINT_SPEED = 8.0
+const SPRINT_SPEED = 6.2
 const CROUCH_SPEED = 2.5
 const JUMP_VELOCITY = 4.5
 

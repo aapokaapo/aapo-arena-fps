@@ -1,6 +1,7 @@
 [gd_scene format=3 uid="uid://dtfk4u7b4xtpj"]
 
 [ext_resource type="Script" uid="uid://dpawifb2atpf6" path="res://scripts/player.gd" id="1_4flbx"]
+[ext_resource type="PackedScene" uid="uid://djdbrxpif2mgi" path="res://resources/Rifle.tscn" id="2_onrkg"]
 
 [sub_resource type="CapsuleShape3D" id="CapsuleShape3D_sh265"]
 
@@ -19,10 +20,16 @@ shape = SubResource("CapsuleShape3D_sh265")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 
 [node name="Camera3D" type="Camera3D" parent="Head" unique_id=1338197417]
+near = 0.15
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="Head" unique_id=829496271]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, -0.39)
 mesh = SubResource("BoxMesh_4flbx")
+
+[node name="Hand" type="Node3D" parent="Head" unique_id=490226382]
+
+[node name="Rifle" parent="Head/Hand" unique_id=587892843 instance=ExtResource("2_onrkg")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0.2, -0.5, -0.7)
 
 [node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1765470655]
 mesh = SubResource("CapsuleMesh_sh265")

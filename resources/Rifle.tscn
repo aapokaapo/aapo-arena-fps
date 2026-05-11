@@ -1,0 +1,13 @@
+[gd_scene format=3 uid="uid://djdbrxpif2mgi"]
+
+[ext_resource type="Script" uid="uid://bkep0kmedo1k" path="res://resources/Weapon.gd" id="1_yqw3o"]
+
+[sub_resource type="BoxMesh" id="BoxMesh_yqw3o"]
+size = Vector3(0.1, 0.1, 1)
+
+[node name="Rifle" type="Node3D" unique_id=587892843]
+script = ExtResource("1_yqw3o")
+metadata/_custom_type_script = "uid://bkep0kmedo1k"
+
+[node name="MeshInstance3D" type="MeshInstance3D" parent="." unique_id=1343670898]
+mesh = SubResource("BoxMesh_yqw3o")
