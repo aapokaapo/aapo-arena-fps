@@ -62,3 +62,7 @@ mesh = SubResource("BoxMesh_q1iji")
 
 [node name="CollisionShape3D" type="CollisionShape3D" parent="TestWorld/Box" unique_id=295199551]
 shape = SubResource("BoxShape3D_q1iji")
+
+[connection signal="connected_to_server" from="NetworkManager" to="." method="_on_network_manager_connected_to_server"]
+[connection signal="data_received" from="NetworkManager" to="." method="_on_network_manager_data_received"]
+[connection signal="disconnected_from_server" from="NetworkManager" to="." method="_on_network_manager_disconnected_from_server"]
