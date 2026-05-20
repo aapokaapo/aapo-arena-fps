@@ -44,3 +44,10 @@ core
 # IDEs commonly used on Linux (optional, uncomment if you use them)
 #.vscode/
 #.idea/
+
+# GameServer binaries
+GameServer/go.mod
+GameServer/go.sum
+GameServer/server.crt
+GameServer/server.key
+
