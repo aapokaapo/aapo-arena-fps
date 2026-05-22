@@ -1,4 +1,4 @@
-package main
+package game
 
 func applyDamage(target *PlayerState, damage uint8, currentTick uint64) {
 	if target.Health <= damage {

@@ -1,4 +1,4 @@
-package main
+package game
 
 // A helper function to process sliding
 func applySlidePhysics(player *PlayerState, deltaTime float32) {

@@ -7,15 +7,17 @@ import (
 	"github.com/aapokaapo/aapo-arena-fps/GameServer/internal/network"
 )
 
+const PORT = ":4433"
+
 func main() {
 	log.Println("Initializing Game Simulation...")
 	world := game.NewWorld()
 
-	log.Println("Starting WebTransport Server on :4433...")
+	log.Println("Starting WebTransport Server on %v...", PORT)
 	server := network.NewTransportServer(world)
 	
 	// Start the server (this blocks the main thread)
-	if err := server.Listen(); err != nil {
+	if err := server.Listen(PORT, "server.crt", "server.key"); err != nil {
 		log.Fatalf("Server crashed: %v", err)
 	}
 }
