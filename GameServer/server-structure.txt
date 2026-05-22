@@ -1,0 +1,18 @@
+aapo-arena-fps/
+├── cmd/
+│   └── server/
+│       └── main.go          // The entry point. Wires everything up.
+├── internal/
+│   ├── models/
+│   │   ├── player.go        // PlayerState struct, Locomotion constants
+│   │   ├── input.go         // PlayerInput, sub-tick structs
+│   │   └── weapons.go       // WeaponStats, WeaponRegistry
+│   ├── game/
+│   │   ├── world.go         // The GameServer struct, state map, tick loop
+│   │   ├── physics.go       // applySlidePhysics, map collision checks
+│   │   └── combat.go        // processShooting, applyDamage
+│   └── network/
+│       ├── transport.go     // WebTransport handlers, connection acceptance
+│       └── protocol.go      // Packing/unpacking bytes for the Godot client
+├── go.mod
+└── go.sum
