@@ -1,5 +1,9 @@
 package game
 
+import (
+	"github.com/aapokaapo/aapo-arena-fps/GameServer/internal/models"
+)
+
 // A helper function to process sliding
 func applySlidePhysics(player *PlayerState, deltaTime float32) {
 	// If the player is sliding, ignore their normal WASD inputs
@@ -39,8 +43,10 @@ func processPlayerInput(player *PlayerState, input PlayerInput) {
 		player.LockedTicks = 30 
 	}
 	// bit 5 is "Jump"
-	if input.Buttons&32 != 0 && player.Vertical == VerticalJumping | VerticalFalling {
-		player.
+	if input.Buttons&32 != 0 && player.Vertical != VerticalGrounded {
+		return
+		// TODO: Raycast logic that checks for a ledge and if it can be climbed or mantled
+	}
 	
 
 	// 3. Block illegal transitions if locked

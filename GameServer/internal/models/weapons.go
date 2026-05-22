@@ -15,6 +15,12 @@ const (
 	FireModeBurst uint8 = 3
 )
 
+
+const (
+	LifeAlive uint8 = 0
+	LifeDead  uint8 = 1
+)
+
 type WeaponStats struct {
 	Damage        uint8
 	ClipSize      uint16
