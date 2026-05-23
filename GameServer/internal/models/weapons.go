@@ -2,6 +2,7 @@ package models
 
 // Weapon IDs
 const (
+	WeaponNone           uint8 = 0
 	WeaponPistol         uint8 = 1
 	WeaponRifle          uint8 = 2
 	WeaponBurstRifle     uint8 = 3
