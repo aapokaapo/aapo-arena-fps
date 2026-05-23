@@ -98,7 +98,7 @@ func (w *World) GetSnapshotData() (uint64, int64, map[string]*models.PlayerState
 	defer w.mu.RUnlock()
 
 	// Note: We return the map directly here because protocol.go iterates over it.
-	// In a highly concurrent scenario with massive player counts, you might 
+	// In a highly concurrent scenario with massive player counts, you might
 	// deep-copy this state to avoid race conditions during JSON marshaling.
 	return w.currentTick, w.currentTimestamp, w.players
 }
@@ -109,7 +109,7 @@ func (w *World) ProcessClientInputs(sessionID string, packet models.ClientInputP
 	defer w.mu.Unlock()
 
 	player, exists := w.players[sessionID]
-	if !exists || player.Life == models.LifeDead {
+	if !exists || player.LifeState == models.LifeDead {
 		return // Ignore inputs from dead or missing players
 	}
 
@@ -131,7 +131,7 @@ func (w *World) ProcessClientInputs(sessionID string, packet models.ClientInputP
 
 		// 2. Process Physics & Movement (Delegated to physics.go)
 		// We pass the World instance so physics can check wall collisions if needed
-		ApplyPlayerPhysics(w, player, input)
+		processPlayerInput(w, player, input)
 
 		// 3. Process Combat & Weapons (Delegated to combat.go)
 		ProcessShooting(w, player, input, w.currentTick)

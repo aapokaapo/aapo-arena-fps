@@ -6,12 +6,12 @@ import (
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"strings" // Added strings import
 	"sync"
 	"time"
-	"io"
 
 	"github.com/quic-go/quic-go" // Added quic-go import
 	"github.com/quic-go/quic-go/http3"
@@ -24,8 +24,8 @@ import (
 
 // TransportServer manages WebTransport connections and datagram routing
 type TransportServer struct {
-	world    *game.World
-	server   *webtransport.Server
+	world  *game.World
+	server *webtransport.Server
 
 	mu       sync.RWMutex
 	sessions map[string]*webtransport.Session
@@ -41,7 +41,6 @@ func NewTransportServer(world *game.World) *TransportServer {
 
 // Listen starts the HTTP/3 WebTransport server and the 60Hz broadcast loop
 func (ts *TransportServer) Listen(addr, certFile, keyFile string) error {
-	// FIX: Added the missing comma here
 	cert, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
 		log.Fatalf("Failed to load certs: %v", err)
@@ -55,14 +54,14 @@ func (ts *TransportServer) Listen(addr, certFile, keyFile string) error {
 
 	// 1. Create a dedicated router
 	mux := http.NewServeMux()
-	
+
 	// 2. Configure QUIC first
 	quicConf := &quic.Config{
-		EnableDatagrams:                  true,
-		// EnableStreamResetPartialDelivery might be deprecated depending on your quic-go version, 
+		EnableDatagrams: true,
+		// EnableStreamResetPartialDelivery might be deprecated depending on your quic-go version,
 		// but if it compiles for you, leave it!
 	}
-	
+
 	// 3. Create HTTP/3 server with TLS config
 	h3Server := &http3.Server{
 		Addr:       addr, // Make sure this uses the addr parameter passed in
@@ -72,7 +71,7 @@ func (ts *TransportServer) Listen(addr, certFile, keyFile string) error {
 			Certificates: []tls.Certificate{cert},
 		},
 	}
-	
+
 	// 4. Configure TLS for HTTP/3 (this adds NextProtos)
 	h3Server.TLSConfig = http3.ConfigureTLSConfig(h3Server.TLSConfig)
 
@@ -83,10 +82,10 @@ func (ts *TransportServer) Listen(addr, certFile, keyFile string) error {
 			return true
 		},
 	}
-	
-	// 6. Configure HTTP3 server for WebTransport (adds WebTransport settings)
-	// Some versions of webtransport-go do this internally, but it's safe to keep if your version requires it.
-	
+
+	// 6. Configure HTTP/3 server for WebTransport (adds WebTransport settings)
+	webtransport.ConfigureHTTP3Server(h3Server)
+
 	ts.server = wtServer
 
 	// Route the WebTransport upgrade endpoint
@@ -96,14 +95,13 @@ func (ts *TransportServer) Listen(addr, certFile, keyFile string) error {
 	go ts.broadcastLoop()
 
 	log.Printf("WebTransport server listening on %s/fps", addr)
-	
-	// FIX: Since we already injected the certificates into TLSConfig up on line 60,
-	// we just need to call ListenAndServe on the underlying H3 server.
-	return ts.server.H3.ListenAndServe()
+
+	return ts.server.ListenAndServe()
 }
 
 // handleWebTransport upgrades an HTTP/3 request to a WebTransport session
 func (ts *TransportServer) handleWebTransport(w http.ResponseWriter, r *http.Request) {
+	log.Printf("WebTransport request: proto=%s method=%s url=%s", r.Proto, r.Method, r.URL)
 	session, err := ts.server.Upgrade(w, r)
 	if err != nil {
 		log.Printf("WebTransport upgrade failed: %v", err)
@@ -121,8 +119,8 @@ func (ts *TransportServer) handleWebTransport(w http.ResponseWriter, r *http.Req
 
 	go ts.sendWelcomeMessage(session, sessionID)
 
-    done := make(chan struct{}, 2)
-    
+	done := make(chan struct{}, 2)
+
 	go ts.readDatagrams(session, sessionID, done)
 	go ts.readStreams(session, sessionID, done)
 
@@ -165,13 +163,13 @@ func (ts *TransportServer) readDatagrams(session *webtransport.Session, sessionI
 		datagram, err := session.ReceiveDatagram(context.Background())
 		if err != nil {
 			// 2. Send a signal to the channel instead of closing it
-			done <- struct{}{} 
-			break 
+			done <- struct{}{}
+			break
 		}
 
 		packet, err := DeserializeClientInputPacket(datagram)
 		if err != nil {
-			continue 
+			continue
 		}
 
 		ts.world.ProcessClientInputs(sessionID, packet)
@@ -185,7 +183,7 @@ func (ts *TransportServer) readStreams(session *webtransport.Session, sessionID 
 		stream, err := session.AcceptUniStream(context.Background())
 		if err != nil {
 			// FIX: Send a signal instead of closing to prevent double-close panics
-			done <- struct{}{} 
+			done <- struct{}{}
 			break
 		}
 
@@ -193,7 +191,9 @@ func (ts *TransportServer) readStreams(session *webtransport.Session, sessionID 
 		go func(s webtransport.ReceiveStream) {
 			// Read all the bytes the client sent in this stream
 			data, err := io.ReadAll(s)
-			if err != nil { return }
+			if err != nil {
+				return
+			}
 
 			// Pass the data to a router
 			ts.handleIncomingReliableEvent(sessionID, data)
@@ -233,26 +233,30 @@ func (ts *TransportServer) handleIncomingReliableEvent(senderID string, data []b
 		return
 	}
 
-    switch event.Type {
-    case models.EventTypeChat:
-    	chat, err := ParseChatPayload(event.Payload)
-    	if err != nil { return }
-    	
-    	chat.SenderID = senderID 
-   		
-    	outgoingBytes, err := SerializeServerEvent(models.EventTypeChat, chat)
-    	if err != nil { return }
-    	
-    	// NEW: Reconstruct the event envelope so the World can save it
-    	replayEvent := models.ServerEvent{
-    		Type:    models.EventTypeChat,
-    		Payload: outgoingBytes, 
-    	}
-    	ts.world.AddEventToReplay(replayEvent) // Send to the recorder!
-    	
-    	// Broadcast to live players
-    	ts.BroadcastReliable(outgoingBytes)
-    }
+	switch event.Type {
+	case models.EventTypeChat:
+		chat, err := ParseChatPayload(event.Payload)
+		if err != nil {
+			return
+		}
+
+		chat.SenderID = senderID
+
+		outgoingBytes, err := SerializeServerEvent(models.EventTypeChat, chat)
+		if err != nil {
+			return
+		}
+
+		// NEW: Reconstruct the event envelope so the World can save it
+		replayEvent := models.ServerEvent{
+			Type:    models.EventTypeChat,
+			Payload: outgoingBytes,
+		}
+		ts.world.AddEventToReplay(replayEvent) // Send to the recorder!
+
+		// Broadcast to live players
+		ts.BroadcastReliable(outgoingBytes)
+	}
 }
 
 func (ts *TransportServer) BroadcastReliable(data []byte) {
@@ -260,7 +264,7 @@ func (ts *TransportServer) BroadcastReliable(data []byte) {
 	defer ts.mu.RUnlock()
 
 	for id, session := range ts.sessions {
-		// Optimization: Spin up a micro-thread for each client so one laggy 
+		// Optimization: Spin up a micro-thread for each client so one laggy
 		// player doesn't freeze the entire broadcast loop!
 		go func(sess *webtransport.Session, peerID string) {
 			// We can also add a 2-second timeout to the context so it doesn't hang forever
@@ -273,7 +277,7 @@ func (ts *TransportServer) BroadcastReliable(data []byte) {
 				return
 			}
 			defer stream.Close()
-			
+
 			_, _ = stream.Write(data)
 		}(session, id)
 	}

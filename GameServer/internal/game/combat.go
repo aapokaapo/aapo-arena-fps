@@ -20,13 +20,13 @@ func ProcessShooting(w *World, player *models.PlayerState, input models.PlayerIn
 	// Normal shooting logic
 	if wantsToShoot && currentTick >= player.NextAttackTick && player.AmmoInClip > 0 {
 		canFire := false
-		
+
 		switch stats.FireMode {
 		case models.FireModeAuto:
 			canFire = true // Just hold the button down
 		case models.FireModeSemi:
 			// Require the player to release and re-pull the trigger
-			if !player.WasShootingLast { 
+			if !player.WasShootingLast {
 				canFire = true
 			}
 		case models.FireModeBurst:
@@ -57,7 +57,6 @@ func fireBullet(w *World, player *models.PlayerState, stats models.WeaponStats) 
 func applyDamage(target *models.PlayerState, damage uint8, currentTick uint64) {
 	if target.Health <= damage {
 		target.Health = 0
-		target.Life = models.LifeDead
 	} else {
 		target.Health -= damage
 	}
@@ -65,6 +64,6 @@ func applyDamage(target *models.PlayerState, damage uint8, currentTick uint64) {
 	// The Descope Mechanic
 	if target.IsAiming {
 		target.IsAiming = false
-		target.ADSLockoutTick = currentTick + 15 // Lock out of ADS for 15 ticks
+		target.ADSLockTicks = currentTick + 15 // Lock out of ADS for 15 ticks
 	}
 }
