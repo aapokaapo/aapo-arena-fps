@@ -4,7 +4,6 @@ import (
 	"sync"
 	"time"
 
-	// Replace this with your actual module path
 	"github.com/aapokaapo/aapo-arena-fps/GameServer/internal/models"
 )
 
@@ -22,15 +21,35 @@ type World struct {
 	players          map[string]*models.PlayerState
 	currentTick      uint64
 	currentTimestamp int64
+	
+	History          *HistoryBuffer
+	Recorder         *MatchRecorder
+	
+	pendingEvents    []models.ServerEvent // NEW: Holding pen for events
 }
 
-// NewWorld initializes the game state
-func NewWorld() *World {
-	return &World{
+// NewWorld initializes the game state, optionally starting the match recorder
+func NewWorld(enableRecording bool, matchID string) *World {
+	w := &World{
 		players:          make(map[string]*models.PlayerState),
+		History:          NewHistoryBuffer(),
 		currentTick:      0,
 		currentTimestamp: time.Now().UnixMilli(),
 	}
+	
+	// Only initialize the recorder if the flag is true
+	if enableRecording {
+		recorder, err := NewMatchRecorder(matchID)
+		if err == nil {
+			w.Recorder = recorder
+		} else {
+			log.Printf("Failed to start recorder: %v", err)
+		}
+	} else {
+		log.Println("⚠️ Match recording is DISABLED for this session.")
+	}
+	
+	return w
 }
 
 // AddPlayer creates a new player entity and assigns them a spawn point
@@ -131,8 +150,21 @@ func (w *World) Tick() {
 	w.currentTick++
 	w.currentTimestamp = time.Now().UnixMilli()
 
-	// Here you would process things that happen independent of player input:
-	// - Advancing projectile (rocket) positions
-	// - Decrementing cooldown timers for items/spawns
-	// - Checking if players fell out of bounds
+	// 1. Grab any events that happened in the last 16ms
+	tickEvents := w.pendingEvents
+	w.pendingEvents = nil // Clear the holding pen for the next tick
+
+	// 2. Save to the ring buffer (now with events!)
+	w.History.SaveSnapshot(w.currentTick, w.players, tickEvents)
+	
+	// 3. Queue it to be written to the SSD
+	if w.Recorder != nil {
+		w.Recorder.RecordTick(w.History.buffer[w.History.head])
+	}
+}
+
+func (w *World) AddEventToReplay(event models.ServerEvent) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pendingEvents = append(w.pendingEvents, event)
 }

@@ -71,3 +71,36 @@ func DeserializeClientInputPacket(data []byte) (models.ClientInputPacket, error)
 
 	return packet, nil
 }
+
+
+// DeserializeServerEvent unpacks the raw bytes from a reliable stream
+func DeserializeServerEvent(data []byte) (models.ServerEvent, error) {
+	var event models.ServerEvent
+	err := json.Unmarshal(data, &event)
+	return event, err
+}
+
+// ParseChatPayload extracts the specific chat data from a generic event
+func ParseChatPayload(rawPayload json.RawMessage) (models.ChatPayload, error) {
+	var chat models.ChatPayload
+	err := json.Unmarshal(rawPayload, &chat)
+	return chat, err
+}
+
+// SerializeServerEvent is a generic function that packages ANY payload into a standard event
+func SerializeServerEvent(eventType string, payloadData any) ([]byte, error) {
+	// 1. Marshal the specific payload (e.g., ChatPayload, ScoreUpdatePayload) into bytes
+	payloadBytes, err := json.Marshal(payloadData)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal payload for event %s: %w", eventType, err)
+	}
+
+	// 2. Wrap it in the standard server event envelope
+	event := models.ServerEvent{
+		Type:    eventType,
+		Payload: payloadBytes,
+	}
+
+	// 3. Marshal the final envelope for network transport
+	return json.Marshal(event)
+}

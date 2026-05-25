@@ -46,15 +46,17 @@ type PlayerState struct {
 	
 	Health      uint8   `json:"hp"`
 	LockedTicks uint8   `json:"-"` // Not sent to client
+	LastProcessedCommandID uint64 `json:"lcid"` // The client NEEDS this!
+	NextAttackTick         uint64 `json:"nat"`  // Helps the client predict shooting animations
 	
 	// Weapon State
-	EquippedWeapon uint8  `json:"wep"`
-	AmmoInClip     uint16 `json:"ammo"`
-	AmmoInReserve  uint16 `json:"ammo"`
+	Weapons        [2]uint8  `json:"wep"`
+	Ammo           [2]uint16 `json:"ammo"`
+	AmmoInReserve  [2]uint16 `json:"ammore"`
+	ActiveWeaponIndex uint8 `json:"awi"`
 	IsAiming       bool   `json:"ads"`
 	
 	// Server-Internal Variables (Not sent to client)
-	NextAttackTick  uint64 `json:"-"` // Server tick when they can shoot again
 	WasShootingLast bool   `json:"-"` // Tracks trigger-pulls for Semi-Auto
 	BurstShotsLeft  uint8  `json:"-"` // Tracks active bursts
 	LastProcessedCommandID uint64 `json:"-"` // Tracks the last sub-tick processed

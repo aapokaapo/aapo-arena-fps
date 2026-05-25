@@ -11,6 +11,7 @@ import (
 	"strings" // Added strings import
 	"sync"
 	"time"
+	"io"
 
 	"github.com/quic-go/quic-go" // Added quic-go import
 	"github.com/quic-go/quic-go/http3"
@@ -18,6 +19,7 @@ import (
 
 	// Replace this with your actual module path
 	"github.com/aapokaapo/aapo-arena-fps/GameServer/internal/game"
+	"github.com/aapokaapo/aapo-arena-fps/GameServer/internal/models"
 )
 
 // TransportServer manages WebTransport connections and datagram routing
@@ -119,7 +121,13 @@ func (ts *TransportServer) handleWebTransport(w http.ResponseWriter, r *http.Req
 
 	go ts.sendWelcomeMessage(session, sessionID)
 
-	ts.readDatagrams(session, sessionID)
+    done := make(chan struct{}, 2)
+    
+	go ts.readDatagrams(session, sessionID, done)
+	go ts.readStreams(session, sessionID, done)
+
+	// Block here until one of those functions detects a disconnect
+	<-done
 
 	ts.mu.Lock()
 	delete(ts.sessions, sessionID)
@@ -151,10 +159,13 @@ func (ts *TransportServer) sendWelcomeMessage(session *webtransport.Session, ses
 	_, _ = stream.Write(payload)
 }
 
-func (ts *TransportServer) readDatagrams(session *webtransport.Session, sessionID string) {
+// 1. Add the 'done' channel to the parameters
+func (ts *TransportServer) readDatagrams(session *webtransport.Session, sessionID string, done chan struct{}) {
 	for {
 		datagram, err := session.ReceiveDatagram(context.Background())
 		if err != nil {
+			// 2. Send a signal to the channel instead of closing it
+			done <- struct{}{} 
 			break 
 		}
 
@@ -167,6 +178,29 @@ func (ts *TransportServer) readDatagrams(session *webtransport.Session, sessionI
 	}
 }
 
+// readStreams listens for reliable events (like chat) coming from this client
+func (ts *TransportServer) readStreams(session *webtransport.Session, sessionID string, done chan struct{}) {
+	for {
+		// AcceptUniStream blocks until the client opens a new stream to the server
+		stream, err := session.AcceptUniStream(context.Background())
+		if err != nil {
+			// FIX: Send a signal instead of closing to prevent double-close panics
+			done <- struct{}{} 
+			break
+		}
+
+		// Handle the stream in a new goroutine so we don't block other incoming streams
+		go func(s webtransport.ReceiveStream) {
+			// Read all the bytes the client sent in this stream
+			data, err := io.ReadAll(s)
+			if err != nil { return }
+
+			// Pass the data to a router
+			ts.handleIncomingReliableEvent(sessionID, data)
+		}(stream)
+	}
+}
+
 func (ts *TransportServer) broadcastLoop() {
 	tickRate := time.Second / 60
 	ticker := time.NewTicker(tickRate)
@@ -175,10 +209,8 @@ func (ts *TransportServer) broadcastLoop() {
 	for range ticker.C {
 		ts.world.Tick()
 
-		// FIX: Correctly extract the three variables returned by GetSnapshotData()
 		tick, timestamp, players := ts.world.GetSnapshotData()
 
-		// FIX: Pass the three variables into SerializeSnapshot
 		payload, err := SerializeSnapshot(tick, timestamp, players)
 		if err != nil {
 			log.Printf("Failed to serialize snapshot: %v", err)
@@ -190,5 +222,59 @@ func (ts *TransportServer) broadcastLoop() {
 			_ = session.SendDatagram(payload)
 		}
 		ts.mu.RUnlock()
+	}
+}
+
+// Incoming reliable events should be only ChatEvents but we can add others later if needed
+func (ts *TransportServer) handleIncomingReliableEvent(senderID string, data []byte) {
+	event, err := DeserializeServerEvent(data)
+	if err != nil {
+		log.Printf("Dropped malformed event stream from %s", senderID)
+		return
+	}
+
+    switch event.Type {
+    case models.EventTypeChat:
+    	chat, err := ParseChatPayload(event.Payload)
+    	if err != nil { return }
+    	
+    	chat.SenderID = senderID 
+   		
+    	outgoingBytes, err := SerializeServerEvent(models.EventTypeChat, chat)
+    	if err != nil { return }
+    	
+    	// NEW: Reconstruct the event envelope so the World can save it
+    	replayEvent := models.ServerEvent{
+    		Type:    models.EventTypeChat,
+    		Payload: outgoingBytes, 
+    	}
+    	ts.world.AddEventToReplay(replayEvent) // Send to the recorder!
+    	
+    	// Broadcast to live players
+    	ts.BroadcastReliable(outgoingBytes)
+    }
+}
+
+func (ts *TransportServer) BroadcastReliable(data []byte) {
+	ts.mu.RLock()
+	defer ts.mu.RUnlock()
+
+	for id, session := range ts.sessions {
+		// Optimization: Spin up a micro-thread for each client so one laggy 
+		// player doesn't freeze the entire broadcast loop!
+		go func(sess *webtransport.Session, peerID string) {
+			// We can also add a 2-second timeout to the context so it doesn't hang forever
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			stream, err := sess.OpenStreamSync(ctx)
+			if err != nil {
+				log.Printf("Failed to open stream to %s: %v", peerID, err)
+				return
+			}
+			defer stream.Close()
+			
+			_, _ = stream.Write(data)
+		}(session, id)
 	}
 }
