@@ -137,7 +137,7 @@ func _ready():
 	var hash_json = JSON.stringify(cert_hash)
 	var connect_code = """
 	var certHashArray = JSON.parse('%s');
-	window.connectWebTransport('https://localhost:4433/game-server', certHashArray);
+	window.connectWebTransport('https://localhost:4433/fps', certHashArray);
 	""" % hash_json
 	
 	JavaScriptBridge.eval(connect_code, true)
