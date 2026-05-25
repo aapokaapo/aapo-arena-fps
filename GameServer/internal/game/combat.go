@@ -6,7 +6,7 @@ import (
 
 // ProcessShooting validates the player's trigger pulls against server fire rates
 func ProcessShooting(w *World, player *models.PlayerState, input models.PlayerInput, currentTick uint64) {
-	stats := models.WeaponRegistry[player.EquippedWeapon]
+	stats := models.WeaponRegistry[player.Weapons[player.ActiveWeaponIndex]]
 	wantsToShoot := input.Buttons&2 != 0 // Assuming Bit 1 is the "Shoot" button
 
 	// Handle automatic burst firing (player doesn't need to hold the button)
@@ -18,7 +18,7 @@ func ProcessShooting(w *World, player *models.PlayerState, input models.PlayerIn
 	}
 
 	// Normal shooting logic
-	if wantsToShoot && currentTick >= player.NextAttackTick && player.AmmoInClip > 0 {
+	if wantsToShoot && currentTick >= player.NextAttackTick && player.Ammo[player.ActiveWeaponIndex] > 0 {
 		canFire := false
 
 		switch stats.FireMode {
@@ -38,7 +38,7 @@ func ProcessShooting(w *World, player *models.PlayerState, input models.PlayerIn
 
 		if canFire {
 			fireBullet(w, player, stats)
-			player.AmmoInClip--
+			player.Ammo[player.ActiveWeaponIndex]--
 			player.NextAttackTick = currentTick + stats.TicksPerShot
 		}
 	}

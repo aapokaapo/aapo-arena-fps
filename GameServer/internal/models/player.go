@@ -78,7 +78,7 @@ type PlayerState struct {
 	ADSLockTicks      uint64    `json:"-"` // Ticks left before they can toggle aiming again
 
 	// Server-Internal Variables (Not sent to client)
-	WasShootingLast        bool   `json:"-"` // Tracks trigger-pulls for Semi-Auto
-	BurstShotsLeft         uint8  `json:"-"` // Tracks active bursts
-	LastProcessedCommandID uint64 `json:"-"` // Tracks the last sub-tick processed
+	WasShootingLast bool  `json:"-"` // Tracks trigger-pulls for Semi-Auto
+	BurstShotsLeft  uint8 `json:"-"` // Tracks active bursts
+
 }

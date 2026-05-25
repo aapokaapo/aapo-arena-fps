@@ -18,7 +18,7 @@ func main() {
 	// Parse the flags from the terminal
 	flag.Parse()
 
-	log.Println("Starting WebTransport Server on %v...", PORT)
+	log.Printf("Starting WebTransport Server on %v...", PORT)
 	// 2. Pass the parsed flags into the World
 	world := game.NewWorld(*recordMatch, *matchID)
 

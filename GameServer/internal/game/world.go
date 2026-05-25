@@ -1,6 +1,7 @@
 package game
 
 import (
+	"log"
 	"sync"
 	"time"
 
@@ -21,11 +22,11 @@ type World struct {
 	players          map[string]*models.PlayerState
 	currentTick      uint64
 	currentTimestamp int64
-	
-	History          *HistoryBuffer
-	Recorder         *MatchRecorder
-	
-	pendingEvents    []models.ServerEvent // NEW: Holding pen for events
+
+	History  *HistoryBuffer
+	Recorder *MatchRecorder
+
+	pendingEvents []models.ServerEvent // NEW: Holding pen for events
 }
 
 // NewWorld initializes the game state, optionally starting the match recorder
@@ -36,7 +37,7 @@ func NewWorld(enableRecording bool, matchID string) *World {
 		currentTick:      0,
 		currentTimestamp: time.Now().UnixMilli(),
 	}
-	
+
 	// Only initialize the recorder if the flag is true
 	if enableRecording {
 		recorder, err := NewMatchRecorder(matchID)
@@ -48,7 +49,7 @@ func NewWorld(enableRecording bool, matchID string) *World {
 	} else {
 		log.Println("⚠️ Match recording is DISABLED for this session.")
 	}
-	
+
 	return w
 }
 
@@ -62,17 +63,17 @@ func (w *World) AddPlayer(sessionID string) {
 	pos := spawnPoints[spawnIndex]
 
 	newPlayer := &models.PlayerState{
-		ID:             sessionID,
-		PosX:           pos[0],
-		PosY:           pos[1],
-		PosZ:           pos[2],
-		Health:         100,
-		Locomotion:     models.LocomotionIdle,
-		Posture:        models.PostureStanding,
-		Vertical:       models.VerticalGrounded,
-		Action:         models.ActionNone,
-		EquippedWeapon: models.WeaponRifle, // Default weapon
-		AmmoInClip:     30,
+		ID:         sessionID,
+		PosX:       pos[0],
+		PosY:       pos[1],
+		PosZ:       pos[2],
+		Health:     100,
+		Locomotion: models.LocomotionIdle,
+		Posture:    models.PostureStanding,
+		Vertical:   models.VerticalGrounded,
+		Action:     models.ActionNone,
+		Weapons:    [2]uint8{models.WeaponRifle, models.WeaponNone}, // Default weapons
+		Ammo:       [2]uint16{15, 0},                                // Default ammo
 	}
 
 	w.players[sessionID] = newPlayer
@@ -156,7 +157,7 @@ func (w *World) Tick() {
 
 	// 2. Save to the ring buffer (now with events!)
 	w.History.SaveSnapshot(w.currentTick, w.players, tickEvents)
-	
+
 	// 3. Queue it to be written to the SSD
 	if w.Recorder != nil {
 		w.Recorder.RecordTick(w.History.buffer[w.History.head])

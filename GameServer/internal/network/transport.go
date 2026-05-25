@@ -188,7 +188,7 @@ func (ts *TransportServer) readStreams(session *webtransport.Session, sessionID 
 		}
 
 		// Handle the stream in a new goroutine so we don't block other incoming streams
-		go func(s webtransport.ReceiveStream) {
+		go func(s *webtransport.ReceiveStream) {
 			// Read all the bytes the client sent in this stream
 			data, err := io.ReadAll(s)
 			if err != nil {
