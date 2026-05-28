@@ -12,6 +12,7 @@ const (
 	LocomotionRunning   uint8 = 1
 	LocomotionSprinting uint8 = 2
 	LocomotionSliding   uint8 = 3
+	LocomotionCrouching uint8 = 4
 )
 
 // Vertical
@@ -52,6 +53,7 @@ type PlayerState struct {
 	PosX  float32 `json:"x"`
 	PosY  float32 `json:"y"`
 	PosZ  float32 `json:"z"`
+	VelY  float32 `json:"-"` // Vertical velocity (internal physics)
 	Yaw   float32 `json:"yaw"`
 	Pitch float32 `json:"pitch"`
 
@@ -65,6 +67,7 @@ type PlayerState struct {
 	Action     uint8 `json:"act"`
 
 	Health                 uint8  `json:"hp"`
+	Shield                 uint8  `json:"shd"`
 	LockedTicks            uint8  `json:"-"`    // Not sent to client
 	LastProcessedCommandID uint64 `json:"lcid"` // The client NEEDS this!
 	NextAttackTick         uint64 `json:"nat"`  // Helps the client predict shooting animations
@@ -77,8 +80,16 @@ type PlayerState struct {
 	IsAiming          bool      `json:"ads"`
 	ADSLockTicks      uint64    `json:"-"` // Ticks left before they can toggle aiming again
 
+	// Server-only killfeed and accuracy tracking
+	KillStreak        uint8  `json:"-"`
+	ConsecutiveHits   uint16 `json:"-"`
+	ShotsSinceLastHit uint16 `json:"-"`
+	LastHitVictimID   string `json:"-"`
+
 	// Server-Internal Variables (Not sent to client)
 	WasShootingLast bool  `json:"-"` // Tracks trigger-pulls for Semi-Auto
 	BurstShotsLeft  uint8 `json:"-"` // Tracks active bursts
 
+	// Tracks damage received since last spawn or health regeneration
+	DamageTracker map[string]uint16 `json:"-"`
 }

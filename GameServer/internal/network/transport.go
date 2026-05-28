@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -207,7 +208,7 @@ func (ts *TransportServer) broadcastLoop() {
 	defer ticker.Stop()
 
 	for range ticker.C {
-		ts.world.Tick()
+		reliableEvents := ts.world.Tick()
 
 		tick, timestamp, players := ts.world.GetSnapshotData()
 
@@ -222,6 +223,10 @@ func (ts *TransportServer) broadcastLoop() {
 			_ = session.SendDatagram(payload)
 		}
 		ts.mu.RUnlock()
+
+		for _, event := range reliableEvents {
+			ts.BroadcastReliableServerEvent(event)
+		}
 	}
 }
 
@@ -247,12 +252,16 @@ func (ts *TransportServer) handleIncomingReliableEvent(senderID string, data []b
 			return
 		}
 
-		// NEW: Reconstruct the event envelope so the World can save it
+		chatJSON, err := json.Marshal(chat)
+		if err != nil {
+			return
+		}
+
 		replayEvent := models.ServerEvent{
 			Type:    models.EventTypeChat,
-			Payload: outgoingBytes,
+			Payload: chatJSON,
 		}
-		ts.world.AddEventToReplay(replayEvent) // Send to the recorder!
+		ts.world.AddEventToReplay(replayEvent)
 
 		// Broadcast to live players
 		ts.BroadcastReliable(outgoingBytes)
@@ -281,4 +290,13 @@ func (ts *TransportServer) BroadcastReliable(data []byte) {
 			_, _ = stream.Write(data)
 		}(session, id)
 	}
+}
+
+func (ts *TransportServer) BroadcastReliableServerEvent(event models.ServerEvent) {
+	data, err := json.Marshal(event)
+	if err != nil {
+		log.Printf("Failed to marshal reliable event: %v", err)
+		return
+	}
+	ts.BroadcastReliable(data)
 }

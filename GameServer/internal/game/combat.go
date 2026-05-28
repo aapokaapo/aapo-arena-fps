@@ -1,6 +1,8 @@
 package game
 
 import (
+	"fmt"
+
 	"github.com/aapokaapo/aapo-arena-fps/GameServer/internal/models"
 )
 
@@ -54,11 +56,53 @@ func fireBullet(w *World, player *models.PlayerState, stats models.WeaponStats) 
 }
 
 // applyDamage processes health reduction and descoping
-func applyDamage(target *models.PlayerState, damage uint8, currentTick uint64) {
+// If the target dies, it also queues a killfeed event.
+func applyDamage(w *World, attacker, target *models.PlayerState, damage uint8, currentTick uint64, weaponID uint8, wasHeadshot bool) {
+	stats := models.WeaponRegistry[weaponID]
+
+	if target.DamageTracker == nil {
+		target.DamageTracker = make(map[string]uint16)
+	}
+
+	// 1. Track consecutive hits on the same player.
+	// Reset count if the attacker hit someone else previously.
+	if attacker.LastHitVictimID != target.ID {
+		attacker.ConsecutiveHits = 0
+		attacker.LastHitVictimID = target.ID
+	}
+	attacker.ConsecutiveHits++
+
+	target.DamageTracker[attacker.ID] += uint16(damage)
+
 	if target.Health <= damage {
 		target.Health = 0
+		attacker.KillStreak++
+
+		// 2. Determine if it's a Perfect Kill:
+		// - Hit count matches the minimum required for the weapon.
+		// - No one else dealt damage (DamageTracker size is 1).
+		isPerfect := (attacker.ConsecutiveHits == uint16(stats.PerfectKillCount)) && (len(target.DamageTracker) == 1)
+
+		killEvent, err := models.NewKillFeedEvent(attacker.ID, target.ID, weaponID, wasHeadshot, isPerfect, attacker.KillStreak, "", target.DamageTracker)
+		if err == nil {
+			w.QueueReliableEvent(killEvent)
+		}
+
+		if attacker.KillStreak >= 3 {
+			streakMessage := fmt.Sprintf("%s is on a killstreak!", attacker.ID)
+			streakEvent, err := models.NewKillFeedEvent(attacker.ID, "", weaponID, false, false, attacker.KillStreak, streakMessage, nil)
+			if err == nil {
+				w.QueueReliableEvent(streakEvent)
+			}
+		}
+
+		target.KillStreak = 0
+		target.ConsecutiveHits = 0
+		target.ShotsSinceLastHit = 0
+		target.DamageTracker = nil // Reset for next life
 	} else {
 		target.Health -= damage
+		target.ShotsSinceLastHit = 0
 	}
 
 	// The Descope Mechanic
@@ -66,4 +110,21 @@ func applyDamage(target *models.PlayerState, damage uint8, currentTick uint64) {
 		target.IsAiming = false
 		target.ADSLockTicks = currentTick + 15 // Lock out of ADS for 15 ticks
 	}
+}
+
+// ApplyHealing increases player health and clears the damage tracker.
+// Use this for health packs or passive regeneration.
+func ApplyHealing(target *models.PlayerState, amount uint8) {
+	if amount == 0 {
+		return
+	}
+
+	newHealth := uint16(target.Health) + uint16(amount)
+	if newHealth > 100 {
+		newHealth = 100
+	}
+	target.Health = uint8(newHealth)
+
+	// Reset damage history since the player has regenerated
+	target.DamageTracker = nil
 }

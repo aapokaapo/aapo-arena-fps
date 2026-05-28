@@ -26,7 +26,8 @@ type World struct {
 	History  *HistoryBuffer
 	Recorder *MatchRecorder
 
-	pendingEvents []models.ServerEvent // NEW: Holding pen for events
+	pendingReplayEvents   []models.ServerEvent // Events saved into replay/history
+	pendingReliableEvents []models.ServerEvent // Events sent to live clients
 }
 
 // NewWorld initializes the game state, optionally starting the match recorder
@@ -63,17 +64,21 @@ func (w *World) AddPlayer(sessionID string) {
 	pos := spawnPoints[spawnIndex]
 
 	newPlayer := &models.PlayerState{
-		ID:         sessionID,
-		PosX:       pos[0],
-		PosY:       pos[1],
-		PosZ:       pos[2],
-		Health:     100,
-		Locomotion: models.LocomotionIdle,
-		Posture:    models.PostureStanding,
-		Vertical:   models.VerticalGrounded,
-		Action:     models.ActionNone,
-		Weapons:    [2]uint8{models.WeaponRifle, models.WeaponNone}, // Default weapons
-		Ammo:       [2]uint16{15, 0},                                // Default ammo
+		ID:            sessionID,
+		PosX:          pos[0],
+		PosY:          pos[1],
+		PosZ:          pos[2],
+		Health:        100,
+		Shield:        100,
+		LifeState:     models.LifeAlive,
+		TeamState:     models.TeamFreeForAll,
+		Locomotion:    models.LocomotionIdle,
+		Posture:       models.PostureStanding,
+		Vertical:      models.VerticalGrounded,
+		Action:        models.ActionNone,
+		Weapons:       [2]uint8{models.WeaponRifle, models.WeaponNone}, // Default weapons
+		Ammo:          [2]uint16{15, 0},
+		AmmoInReserve: [2]uint16{15, 0}, // Default ammo
 	}
 
 	w.players[sessionID] = newPlayer
@@ -131,8 +136,11 @@ func (w *World) ProcessClientInputs(sessionID string, packet models.ClientInputP
 		player.Yaw = input.Yaw
 
 		// 2. Process Physics & Movement (Delegated to physics.go)
-		// We pass the World instance so physics can check wall collisions if needed
-		processPlayerInput(w, player, input)
+		moveVector := [2]float32{input.MoveX, input.MoveY}
+		wantsToSlide := (input.Buttons & 16) != 0
+		wantsToJump := (input.Buttons & 32) != 0
+
+		processPlayerPhysics(w, player, moveVector, wantsToJump, wantsToSlide, input.DeltaTime)
 
 		// 3. Process Combat & Weapons (Delegated to combat.go)
 		ProcessShooting(w, player, input, w.currentTick)
@@ -144,7 +152,7 @@ func (w *World) ProcessClientInputs(sessionID string, packet models.ClientInputP
 
 // Tick advances the server time by one frame
 // This is called exactly 60 times a second by the broadcastLoop in transport.go
-func (w *World) Tick() {
+func (w *World) Tick() []models.ServerEvent {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -152,20 +160,31 @@ func (w *World) Tick() {
 	w.currentTimestamp = time.Now().UnixMilli()
 
 	// 1. Grab any events that happened in the last 16ms
-	tickEvents := w.pendingEvents
-	w.pendingEvents = nil // Clear the holding pen for the next tick
+	reliableEvents := w.pendingReliableEvents
+	replayEvents := w.pendingReplayEvents
+	w.pendingReliableEvents = nil
+	w.pendingReplayEvents = nil
 
 	// 2. Save to the ring buffer (now with events!)
-	w.History.SaveSnapshot(w.currentTick, w.players, tickEvents)
+	w.History.SaveSnapshot(w.currentTick, w.players, replayEvents)
 
 	// 3. Queue it to be written to the SSD
 	if w.Recorder != nil {
 		w.Recorder.RecordTick(w.History.buffer[w.History.head])
 	}
+
+	return reliableEvents
 }
 
 func (w *World) AddEventToReplay(event models.ServerEvent) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	w.pendingEvents = append(w.pendingEvents, event)
+	w.pendingReplayEvents = append(w.pendingReplayEvents, event)
+}
+
+func (w *World) QueueReliableEvent(event models.ServerEvent) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	w.pendingReliableEvents = append(w.pendingReliableEvents, event)
+	w.pendingReplayEvents = append(w.pendingReplayEvents, event)
 }

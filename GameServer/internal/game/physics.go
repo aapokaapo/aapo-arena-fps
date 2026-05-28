@@ -15,9 +15,24 @@ func applySlidePhysics(player *models.PlayerState, deltaTime float32) {
 }
 
 func applyGravity(player *models.PlayerState, deltaTime float32) {
-	// If the player is not grounded, apply gravity
-	if player.Vertical != models.VerticalGrounded {
-		player.PosY -= 9.81 * deltaTime
+	if player.Vertical == models.VerticalGrounded {
+		player.VelY = 0
+		return
+	}
+
+	// Gravity is an acceleration (units/s^2). It affects velocity first.
+	// Note: 20.0-30.0 often feels "snappier" in FPS games than the real-world 9.81.
+	const gravityAccel float32 = 25.0
+	player.VelY -= gravityAccel * deltaTime
+	player.PosY += player.VelY * deltaTime
+
+	// Basic ground check (assuming a flat plane at Y=0)
+	if player.PosY <= 0 {
+		player.PosY = 0
+		player.VelY = 0
+		player.Vertical = models.VerticalGrounded
+	} else if player.VelY < 0 {
+		player.Vertical = models.VerticalFalling
 	}
 }
 
@@ -26,15 +41,50 @@ func checkLedgeInFront(x, y, z float32) (float32, bool) {
 	return 0, false
 }
 
-func processPlayerInput(_ *World, player *models.PlayerState, input models.PlayerInput) {
+// applyPhysicsAndMovement applies movement, slide physics, and gravity to the player
+// moveVector is a normalized direction vector (should be pre-normalized by input layer)
+func applyPhysicsAndMovement(player *models.PlayerState, moveVector [2]float32, deltaTime float32) {
+	// Apply gravity first (affects vertical velocity)
+	applyGravity(player, deltaTime)
+
+	// Apply slide physics if the player is sliding
+	if player.Locomotion == models.LocomotionSliding {
+		applySlidePhysics(player, deltaTime)
+	} else {
+		// Apply normal movement based on normalized input vector
+		applyNormalMovement(player, moveVector, deltaTime)
+	}
+}
+
+// applyNormalMovement handles regular movement when not sliding
+// moveVector: [x, z] normalized direction vector from input layer (-1.0 to 1.0)
+func applyNormalMovement(player *models.PlayerState, moveVector [2]float32, deltaTime float32) {
+	// Movement speed varies by locomotion state
+	var speed float32
+	switch player.Locomotion {
+	case models.LocomotionSprinting:
+		speed = 7.0 // Units per second
+	case models.LocomotionRunning:
+		speed = 5.0
+	case models.LocomotionCrouching:
+		speed = 2.5
+	default:
+		speed = 0
+	}
+
+	// Apply movement from the normalized input vector
+	player.PosX += moveVector[0] * speed * deltaTime
+	player.PosZ += moveVector[1] * speed * deltaTime
+}
+
+func processPlayerPhysics(w *World, player *models.PlayerState, moveVector [2]float32, wantsToJump, wantsToSlide bool, deltaTime float32) {
 	// 1. Decrement the lock if it's active
 	if player.LockedTicks > 0 {
 		player.LockedTicks--
 	}
 
 	// 2. Handle Slide Initiation
-	// Let's say bit 4 is "Slide Request"
-	if input.Buttons&16 != 0 && player.Locomotion == models.LocomotionSprinting {
+	if wantsToSlide && player.Locomotion == models.LocomotionSprinting {
 		player.Locomotion = models.LocomotionSliding
 		player.Posture = models.PostureCrouching
 
@@ -42,10 +92,10 @@ func processPlayerInput(_ *World, player *models.PlayerState, input models.Playe
 		// E.g., a 0.5 second slide at 60Hz = 30 ticks
 		player.LockedTicks = 30
 	}
-	// bit 5 is "Jump"
-	if input.Buttons&32 != 0 && player.Vertical != models.VerticalGrounded {
-		return
-		// TODO: Raycast logic that checks for a ledge and if it can be climbed or mantled
+
+	if wantsToJump && player.Vertical == models.VerticalGrounded {
+		player.Vertical = models.VerticalJumping
+		player.VelY = 10.0 // Initial upward impulse
 	}
 
 	// 3. Block illegal transitions if locked
@@ -61,4 +111,7 @@ func processPlayerInput(_ *World, player *models.PlayerState, input models.Playe
 
 		// Normal input processing for sprint/crouch goes here...
 	}
+
+	// 5. Apply Movement and Gravity
+	applyPhysicsAndMovement(player, moveVector, deltaTime)
 }
